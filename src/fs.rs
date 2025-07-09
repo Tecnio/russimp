@@ -43,7 +43,10 @@ impl<T: FileSystem> FileOperationsWrapper<T> {
         let user_data = Box::into_raw(managed_box);
         #[cfg(any(target_arch = "x86", target_arch = "x86_64", target_os = "macos"))]
         let user_data = user_data as *mut i8;
-        #[cfg(all(any(target_arch = "arm", target_arch = "aarch64"), not(target_os = "macos")))]
+        #[cfg(all(
+            any(target_arch = "arm", target_arch = "aarch64"),
+            not(target_os = "macos")
+        ))]
         let user_data = user_data as *mut u8;
         FileOperationsWrapper {
             ai_file: aiFileIO {
@@ -64,16 +67,24 @@ impl<T: FileSystem> FileOperationsWrapper<T> {
         file_path: *const ::std::os::raw::c_char,
         mode: *const ::std::os::raw::c_char,
     ) -> *mut aiFile {
-        let file_system = Box::leak(Box::from_raw(
-            (*ai_file_io).UserData as *mut &dyn FileSystem,
-        ));
+        let file_system = unsafe {
+            Box::leak(Box::from_raw(
+                (*ai_file_io).UserData as *mut &dyn FileSystem,
+            ))
+        };
 
-        let file_path = CStr::from_ptr(file_path)
-            .to_str()
-            .unwrap_or("Invalid UTF-8 Filename");
-        let mode = CStr::from_ptr(mode)
-            .to_str()
-            .unwrap_or("Invalid UTF-8 Mode");
+        let file_path = unsafe {
+            CStr::from_ptr(file_path)
+                .to_str()
+                .unwrap_or("Invalid UTF-8 Filename")
+        };
+
+        let mode = unsafe {
+            CStr::from_ptr(mode)
+                .to_str()
+                .unwrap_or("Invalid UTF-8 Mode")
+        };
+
         let file = match file_system.open(file_path, mode) {
             None => return std::ptr::null_mut(),
             Some(file) => file,
@@ -85,7 +96,10 @@ impl<T: FileSystem> FileOperationsWrapper<T> {
         let managed_box = Box::into_raw(double_box); // Cleaned up in io_close.
         #[cfg(any(target_arch = "x86", target_arch = "x86_64", target_os = "macos"))]
         let user_data = managed_box as *mut i8;
-        #[cfg(all(any(target_arch = "arm", target_arch = "aarch64"), not(target_os = "macos")))]
+        #[cfg(all(
+            any(target_arch = "arm", target_arch = "aarch64"),
+            not(target_os = "macos")
+        ))]
         let user_data = managed_box as *mut u8;
         let ai_file = aiFile {
             ReadProc: Some(Self::io_read),
@@ -104,10 +118,14 @@ impl<T: FileSystem> FileOperationsWrapper<T> {
     unsafe extern "C" fn io_close(_ai_file_io: *mut aiFileIO, ai_file: *mut aiFile) {
         // Given that this is close, we are careful to not leak, but instead drop the file when we
         // exit this scope.
-        let ai_file = Box::from_raw(ai_file);
-        let mut file: Box<Box<dyn FileOperations>> =
-            Box::from_raw((*ai_file).UserData as *mut Box<dyn FileOperations>);
-        file.close();
+        unsafe {
+            let ai_file = Box::from_raw(ai_file);
+
+            let mut file: Box<Box<dyn FileOperations>> =
+                Box::from_raw((*ai_file).UserData as *mut Box<dyn FileOperations>);
+
+            file.close();
+        }
     }
     /// Turn an aiFile pointer into a the "self" object.
     ///
@@ -119,9 +137,11 @@ impl<T: FileSystem> FileOperationsWrapper<T> {
         // We return a "leaked" pointer here, using the saved off double box pointer that we
         // stuffed in the UserData. We "leak" as we don't acutally want to return ownership, only
         // the mutable reference. The box is manually cleaned up as part of io_close.
-        Box::leak(Box::from_raw(
-            (*ai_file).UserData as *mut Box<dyn FileOperations>,
-        ))
+        unsafe {
+            Box::leak(Box::from_raw(
+                (*ai_file).UserData as *mut Box<dyn FileOperations>,
+            ))
+        }
     }
     // Implementation for aiFile::ReadProc.
     unsafe extern "C" fn io_read(
@@ -130,9 +150,10 @@ impl<T: FileSystem> FileOperationsWrapper<T> {
         size: usize,
         count: usize,
     ) -> usize {
-        let file = Self::get_file(ai_file);
-        let mut buffer =
-            std::slice::from_raw_parts_mut(buffer as *mut u8, (size * count).try_into().unwrap());
+        let file = unsafe { Self::get_file(ai_file) };
+        let mut buffer = unsafe {
+            std::slice::from_raw_parts_mut(buffer as *mut u8, (size * count).try_into().unwrap())
+        };
         if size == 0 {
             panic!("Size 0 is invalid");
         }
@@ -181,9 +202,10 @@ impl<T: FileSystem> FileOperationsWrapper<T> {
         size: usize,
         count: usize,
     ) -> usize {
-        let file = Self::get_file(ai_file);
-        let mut buffer =
-            std::slice::from_raw_parts(buffer as *mut u8, (size * count).try_into().unwrap());
+        let file = unsafe { Self::get_file(ai_file) };
+        let mut buffer = unsafe {
+            std::slice::from_raw_parts(buffer as *mut u8, (size * count).try_into().unwrap())
+        };
         if size == 0 {
             panic!("Write of size 0");
         }
@@ -224,19 +246,25 @@ impl<T: FileSystem> FileOperationsWrapper<T> {
             total
         }
     }
+
     // Implementation for aiFile::TellProc.
     unsafe extern "C" fn io_tell(ai_file: *mut aiFile) -> usize {
-        let file = Self::get_file(ai_file);
+        let file = unsafe { Self::get_file(ai_file) };
+
         file.tell()
     }
+
     // Implementation for aiFile::FileSizeProc.
     unsafe extern "C" fn io_size(ai_file: *mut aiFile) -> usize {
-        let file = Self::get_file(ai_file);
+        let file = unsafe { Self::get_file(ai_file) };
+
         file.size()
     }
+
     // Implementation for aiFile::SeekProc.
     unsafe extern "C" fn io_seek(ai_file: *mut aiFile, pos: usize, origin: aiOrigin) -> aiReturn {
-        let file = Self::get_file(ai_file);
+        let file = unsafe { Self::get_file(ai_file) };
+
         let seek_from = match origin {
             russimp_sys::aiOrigin_aiOrigin_SET => SeekFrom::Start(pos as u64),
             russimp_sys::aiOrigin_aiOrigin_CUR => SeekFrom::Current(pos as i64),
@@ -250,7 +278,8 @@ impl<T: FileSystem> FileOperationsWrapper<T> {
     }
     // Implementation for aiFile::FlushProc.
     unsafe extern "C" fn io_flush(ai_file: *mut aiFile) {
-        let file = Self::get_file(ai_file);
+        let file = unsafe { Self::get_file(ai_file) };
+
         file.flush();
     }
 }
@@ -269,7 +298,7 @@ mod test {
     use crate::scene::Scene;
     use crate::utils;
     use std::fs::File;
-    use std::io::{prelude::*, SeekFrom};
+    use std::io::{SeekFrom, prelude::*};
 
     struct MyFileOperations {
         file: File,
