@@ -1077,9 +1077,8 @@ dependencies = [
 
 [[package]]
 name = "russimp-sys"
-version = "2.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3257f93c651c6b87d6f7a5329bf2079bfcf0fc4e2dc7e9b0f05cb3ba5d3b03b"
+version = "2.0.3"
+source = "git+https://github.com/Tecnio/russimp-sys#4d9465890d2b0dfbc57bdb0396b45ed11f05bf5b"
 dependencies = [
  "bindgen",
  "built",

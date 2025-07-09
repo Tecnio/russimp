@@ -10,7 +10,7 @@ name = "russimp"
 path = "src/lib.rs"
 
 [dependencies]
-russimp-sys = "2.0.1"
+russimp-sys = { git = "https://github.com/Tecnio/russimp-sys" }
 
 num-derive = "0.4"
 num-traits = "0.2.15"
