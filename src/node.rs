@@ -1,15 +1,14 @@
 use crate::{metadata::MetaData, sys::aiNode, *};
+
 use derivative::Derivative;
-use std::{
-    cell::RefCell,
-    rc::{Rc, Weak},
-};
+
+use std::sync::{Arc, Weak};
 
 #[derive(Default, Derivative)]
 #[derivative(Debug)]
 pub struct Node {
     pub name: String,
-    pub children: RefCell<Vec<Rc<Node>>>,
+    pub children: Arc<[Arc<Node>]>,
     pub meshes: Vec<u32>,
     pub metadata: Option<MetaData>,
     pub transformation: Matrix4x4,
@@ -18,32 +17,29 @@ pub struct Node {
 }
 
 impl Node {
-    pub(crate) fn new(node: &aiNode) -> Rc<Node> {
+    pub(crate) fn new(node: &aiNode) -> Arc<Node> {
         Self::allocate(node, None)
     }
 
-    fn allocate(node: &aiNode, parent: Option<&Rc<Node>>) -> Rc<Node> {
-        // current simple node
-        let res_node = Rc::new(Self::create_simple_node(node, parent));
-
-        *res_node.children.borrow_mut() =
-            utils::get_base_type_vec_from_raw(node.mChildren, node.mNumChildren)
+    fn allocate(node: &aiNode, parent: Option<Weak<Node>>) -> Arc<Node> {
+        let current_node = Arc::new_cyclic(|weak_self| {
+            let children = utils::get_base_type_vec_from_raw(node.mChildren, node.mNumChildren)
                 .into_iter()
-                .map(|child| Self::allocate(child, Some(&res_node)))
-                .collect::<Vec<_>>();
+                .map(|child| Self::allocate(child, Some(weak_self.clone())))
+                .collect::<Vec<_>>()
+                .into();
 
-        res_node
-    }
+            Node {
+                name: node.mName.into(),
+                children,
+                meshes: utils::get_raw_vec(node.mMeshes, node.mNumMeshes),
+                metadata: utils::get_raw(node.mMetaData),
+                transformation: (&node.mTransformation).into(),
+                parent: parent.unwrap_or_else(Weak::new),
+            }
+        });
 
-    fn create_simple_node(node: &aiNode, parent: Option<&Rc<Node>>) -> Node {
-        Node {
-            name: node.mName.into(),
-            children: RefCell::new(Vec::new()),
-            meshes: utils::get_raw_vec(node.mMeshes, node.mNumMeshes),
-            metadata: utils::get_raw(node.mMetaData),
-            transformation: (&node.mTransformation).into(),
-            parent: parent.map(Rc::downgrade).unwrap_or_else(Weak::new),
-        }
+        current_node
     }
 }
 
@@ -69,7 +65,7 @@ mod test {
         .unwrap();
 
         let root = scene.root.as_ref().unwrap();
-        let children = root.children.borrow();
+        let children = &root.children;
 
         assert_eq!("<BlenderRoot>".to_string(), root.name);
         assert_eq!(3, children.len());
@@ -108,7 +104,7 @@ mod test {
         .unwrap();
 
         let root = scene.root.as_ref().unwrap();
-        let children = root.children.borrow();
+        let children = &root.children;
 
         let first_son = &children[0];
         let dad = first_son.parent.upgrade().unwrap();

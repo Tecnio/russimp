@@ -1,13 +1,17 @@
-use crate::{sys::*, utils, utils::get_base_type_vec_from_raw, RussimpError, Russult};
+use crate::{RussimpError, Russult, sys::*, utils, utils::get_base_type_vec_from_raw};
+
 use derivative::Derivative;
+
 use num_enum::TryFromPrimitive;
 use num_traits::FromPrimitive;
-use std::{
-    cell::RefCell, collections::HashMap, ffi::CStr, mem::MaybeUninit, path::Path,
-    ptr::slice_from_raw_parts, rc::Rc,
-};
+
 use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
+
+use std::{
+    cell::RefCell, collections::HashMap, ffi::CStr, mem::MaybeUninit, path::Path,
+    ptr::slice_from_raw_parts, sync::Arc,
+};
 
 const EMBEDDED_TEXNAME_PREFIX: &str = "*";
 
@@ -89,10 +93,10 @@ pub(crate) fn generate_materials(scene: &aiScene) -> Russult<Vec<Material>> {
     let properties = create_material_properties(&materials);
     let mut result = Vec::new();
 
-    let mut converted_textures: HashMap<usize, Rc<RefCell<Texture>>> = HashMap::new();
+    let mut converted_textures: HashMap<usize, Arc<RefCell<Texture>>> = HashMap::new();
 
     for (mat_index, &mat) in materials.iter().enumerate() {
-        let mut material_textures: HashMap<TextureType, Rc<RefCell<Texture>>> = HashMap::new();
+        let mut material_textures: HashMap<TextureType, Arc<RefCell<Texture>>> = HashMap::new();
 
         for tex_type in TextureType::iter() {
             let material_filenames = get_textures_of_type_from_material(mat, tex_type)?;
@@ -106,7 +110,7 @@ pub(crate) fn generate_materials(scene: &aiScene) -> Russult<Vec<Material>> {
                     } else {
                         let new_texture = create_texture_from(textures[embedded_texture], true);
                         converted_textures
-                            .insert(embedded_texture, Rc::new(RefCell::new(new_texture)));
+                            .insert(embedded_texture, Arc::new(RefCell::new(new_texture)));
                         material_textures.insert(
                             tex_type,
                             converted_textures.get(&embedded_texture).unwrap().clone(),
@@ -261,13 +265,13 @@ fn get_properties(material: &aiMaterial) -> Vec<MaterialProperty> {
 #[derivative(Debug)]
 pub struct Material {
     pub properties: Vec<MaterialProperty>,
-    pub textures: HashMap<TextureType, Rc<RefCell<Texture>>>,
+    pub textures: HashMap<TextureType, Arc<RefCell<Texture>>>,
 }
 
 impl Material {
     fn new(
         properties: Vec<MaterialProperty>,
-        textures: HashMap<TextureType, Rc<RefCell<Texture>>>,
+        textures: HashMap<TextureType, Arc<RefCell<Texture>>>,
     ) -> Self {
         Self {
             properties,
@@ -656,12 +660,16 @@ mod test {
             .filter(|x| x.key.eq(&FILENAME_PROPERTY.to_string()))
             .collect();
 
-        assert!(properties_first_material
-            .iter()
-            .any(|&x| x.semantic == TextureType::Diffuse));
-        assert!(properties_first_material
-            .iter()
-            .any(|&x| x.semantic == TextureType::BaseColor));
+        assert!(
+            properties_first_material
+                .iter()
+                .any(|&x| x.semantic == TextureType::Diffuse)
+        );
+        assert!(
+            properties_first_material
+                .iter()
+                .any(|&x| x.semantic == TextureType::BaseColor)
+        );
         assert_eq!(0, properties_second_material.len())
     }
 

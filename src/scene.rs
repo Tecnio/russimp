@@ -11,10 +11,8 @@ use crate::{
     sys::*,
     *,
 };
-use std::{
-    ffi::{CStr, CString},
-    rc::Rc,
-};
+use std::ffi::{CStr, CString};
+use std::sync::Arc;
 
 use self::property::PropertyStore;
 
@@ -27,7 +25,7 @@ pub struct Scene {
     pub animations: Vec<Animation>,
     pub cameras: Vec<Camera>,
     pub lights: Vec<Light>,
-    pub root: Option<Rc<Node>>,
+    pub root: Option<Arc<Node>>,
     pub flags: u32,
 }
 
@@ -627,7 +625,7 @@ impl Scene {
 mod test {
     use crate::scene::{PostProcess, Scene};
     use crate::utils;
-    use std::rc::Rc;
+    use std::sync::Arc;
 
     #[test]
     fn importing_invalid_file_returns_error() {
@@ -725,11 +723,11 @@ mod test {
         .unwrap();
 
         let root = scene.root.as_ref().unwrap().clone();
-        assert_eq!(Rc::strong_count(&root), 2);
+        assert_eq!(Arc::strong_count(&root), 2);
 
         drop(scene);
 
         // Strong refcount must be 1 here, otherwise we leak memory
-        assert_eq!(Rc::strong_count(&root), 1);
+        assert_eq!(Arc::strong_count(&root), 1);
     }
 }
