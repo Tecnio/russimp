@@ -9,8 +9,8 @@ use strum::IntoEnumIterator;
 use strum_macros::EnumIter;
 
 use std::{
-    cell::RefCell, collections::HashMap, ffi::CStr, mem::MaybeUninit, path::Path,
-    ptr::slice_from_raw_parts, sync::Arc,
+    collections::HashMap, ffi::CStr, mem::MaybeUninit, path::Path, ptr::slice_from_raw_parts,
+    sync::Arc,
 };
 
 const EMBEDDED_TEXNAME_PREFIX: &str = "*";
@@ -93,10 +93,10 @@ pub(crate) fn generate_materials(scene: &aiScene) -> Russult<Vec<Material>> {
     let properties = create_material_properties(&materials);
     let mut result = Vec::new();
 
-    let mut converted_textures: HashMap<usize, Arc<RefCell<Texture>>> = HashMap::new();
+    let mut converted_textures: HashMap<usize, Arc<Texture>> = HashMap::new();
 
     for (mat_index, &mat) in materials.iter().enumerate() {
-        let mut material_textures: HashMap<TextureType, Arc<RefCell<Texture>>> = HashMap::new();
+        let mut material_textures: HashMap<TextureType, Arc<Texture>> = HashMap::new();
 
         for tex_type in TextureType::iter() {
             let material_filenames = get_textures_of_type_from_material(mat, tex_type)?;
@@ -109,8 +109,7 @@ pub(crate) fn generate_materials(scene: &aiScene) -> Russult<Vec<Material>> {
                         material_textures.insert(tex_type, tex.clone());
                     } else {
                         let new_texture = create_texture_from(textures[embedded_texture], true);
-                        converted_textures
-                            .insert(embedded_texture, Arc::new(RefCell::new(new_texture)));
+                        converted_textures.insert(embedded_texture, Arc::new(new_texture));
                         material_textures.insert(
                             tex_type,
                             converted_textures.get(&embedded_texture).unwrap().clone(),
@@ -265,13 +264,13 @@ fn get_properties(material: &aiMaterial) -> Vec<MaterialProperty> {
 #[derivative(Debug)]
 pub struct Material {
     pub properties: Vec<MaterialProperty>,
-    pub textures: HashMap<TextureType, Arc<RefCell<Texture>>>,
+    pub textures: HashMap<TextureType, Arc<Texture>>,
 }
 
 impl Material {
     fn new(
         properties: Vec<MaterialProperty>,
-        textures: HashMap<TextureType, Arc<RefCell<Texture>>>,
+        textures: HashMap<TextureType, Arc<Texture>>,
     ) -> Self {
         Self {
             properties,
@@ -691,7 +690,7 @@ mod test {
 
         let texture = scene.materials[0].textures.get(&Diffuse).unwrap();
 
-        let temp = texture.borrow();
+        let temp = &texture;
 
         assert!(matches!(
             &temp.data,
